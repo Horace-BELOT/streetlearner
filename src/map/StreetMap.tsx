@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Map as MLMap, NavigationControl, type MapMouseEvent, type LayerSpecification, type ExpressionSpecification } from "maplibre-gl";
+import { Map as MLMap, NavigationControl, setWorkerUrl, type MapMouseEvent, type LayerSpecification, type ExpressionSpecification } from "maplibre-gl";
+// MapLibre resolves its worker relative to its own module URL, which breaks once bundled:
+// let Vite bundle the worker (and its shared chunk) and hand MapLibre the resulting URL.
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+setWorkerUrl(maplibreWorkerUrl);
 import turfBbox from "@turf/bbox";
 import nearestPointOnLine from "@turf/nearest-point-on-line";
 import type { LineString, MultiLineString } from "geojson";
