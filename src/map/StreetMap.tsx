@@ -25,8 +25,9 @@ export type StreetMapProps = {
   hoverId?: string | null;
   onClick?: (id: string) => void;
   onHover?: (id: string | null) => void;
-  /** fit the map to these street ids; change `nonce` to re-trigger */
-  fit?: { ids: string[]; nonce: number; padding?: number } | null;
+  /** fit the map to these street ids; change `nonce` to re-trigger.
+   *  `ifNeeded`: skip the move when the streets are already fully visible (and zoom >= minZoom). */
+  fit?: { ids: string[]; nonce: number; padding?: number; ifNeeded?: boolean; minZoom?: number } | null;
   className?: string;
 };
 
@@ -207,6 +208,11 @@ export default function StreetMap(p: StreetMapProps) {
     const feats = fit.ids.map((id) => propsRef.current.city.fc.features.find((f) => f.properties.id === id)).filter(Boolean);
     if (!feats.length) return;
     const b = turfBbox({ type: "FeatureCollection", features: feats as never[] });
+    if (fit.ifNeeded) {
+      const cur = map.getBounds();
+      const visible = cur.contains([b[0], b[1]]) && cur.contains([b[2], b[3]]);
+      if (visible && map.getZoom() >= (fit.minZoom ?? 0)) return;
+    }
     map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: fit.padding ?? 80, maxZoom: 16, duration: 700 });
   };
 

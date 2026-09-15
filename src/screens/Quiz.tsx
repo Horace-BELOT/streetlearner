@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import turfDistance from "@turf/distance";
-import StreetMap, { type StreetState } from "../map/StreetMap";
+import StreetMap, { type StreetState, type StreetMapProps } from "../map/StreetMap";
 import { useStore } from "../state/store";
 import type { CityData, QuizMode, StreetProps, TrainingSet } from "../lib/types";
 import { pickSession, summarize } from "../lib/leitner";
@@ -17,7 +17,7 @@ export default function Quiz({ set, city, mode }: { set: TrainingSet; city: City
   const [queue, setQueue] = useState<{ id: string; retry: boolean }[]>([]);
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
-  const [fit, setFit] = useState<{ ids: string[]; nonce: number; padding?: number } | null>(null);
+  const [fit, setFit] = useState<StreetMapProps["fit"]>(null);
   const [typed, setTyped] = useState("");
 
   const stats = summarize(set.streetIds, (id) => store.getProgress(set.cityId, id));
@@ -33,20 +33,28 @@ export default function Quiz({ set, city, mode }: { set: TrainingSet; city: City
     setPhase("ask");
   };
 
-  // fit the map for each question
+  // camera: frame the whole set once at session start (place mode), and only move
+  // when the street to show is out of view (name mode) — no gratuitous pans between questions
   useEffect(() => {
     if (phase !== "ask" || !target) return;
-    if (mode === "name") setFit({ ids: [target.id], nonce: Date.now(), padding: 140 });
-    else setFit({ ids: set.streetIds, nonce: Date.now(), padding: 40 });
+    if (mode === "name") setFit({ ids: [target.id], nonce: Date.now(), padding: 140, ifNeeded: true, minZoom: 13 });
+    else if (idx === 0) setFit({ ids: set.streetIds, nonce: Date.now(), padding: 40 });
     setTyped("");
   }, [phase, idx, mode, target?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // correct answer → move on by itself after a short confirmation
+  useEffect(() => {
+    if (phase !== "answered" || !last?.ok) return;
+    const t = setTimeout(next, 700);
+    return () => clearTimeout(t);
+  }, [phase, last]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const answer = (ok: boolean, extra: Partial<Answer> = {}) => {
     if (!current || phase !== "ask") return;
     store.answer(set.cityId, current.id, ok);
     setAnswers((a) => [...a, { id: current.id, ok, retry: current.retry, ...extra }]);
     setPhase("answered");
-    if (!ok && mode === "place" && extra.pickedId) setFit({ ids: [current.id, extra.pickedId], nonce: Date.now(), padding: 100 });
+    if (!ok && mode === "place" && extra.pickedId) setFit({ ids: [current.id, extra.pickedId], nonce: Date.now(), padding: 100, ifNeeded: true });
   };
 
   const next = () => {
@@ -193,7 +201,7 @@ function PlacePrompt({ target, phase, last, city, onNext }: { target: StreetProp
           </div>
         )}
       </div>
-      {phase === "answered" && <Button variant="primary" onClick={onNext}>Suivant ↵</Button>}
+      {phase === "answered" && !last?.ok && <Button variant="primary" onClick={onNext}>Suivant ↵</Button>}
     </div>
   );
 }
@@ -260,7 +268,7 @@ function NamePrompt(p: { target: StreetProps; phase: Phase; last?: Answer; city:
               {last?.ok ? "Exact !" : last?.typed ? <>Raté, tu as répondu « {last.typed} »</> : "Passée"}
             </div>
           </div>
-          <Button variant="primary" onClick={p.onNext}>Suivant ↵</Button>
+          {!last?.ok && <Button variant="primary" onClick={p.onNext}>Suivant ↵</Button>}
         </div>
       )}
     </div>
